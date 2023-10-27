@@ -1,10 +1,10 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import rospy
 import numpy as np
 import gvom
 import sensor_msgs.point_cloud2 as pc2
 from nav_msgs.msg import Odometry, OccupancyGrid
-from sensor_msgs.msg import PointCloud2
+from sensor_msgs.msg import PointCloud2, PointField
 import tf2_ros
 import tf
 import ros_numpy
@@ -20,7 +20,7 @@ class VoxelMapper:
         self.tf_listener = tf2_ros.TransformListener(self.tfBuffer)
         self.tf_transformer = tf.TransformerROS()
 
-        self.odom_frame = rospy.get_param("~odom_frame", "/camera_init")
+        self.odom_frame = rospy.get_param("~odom_frame", "world_enu")
         self.xy_resolution = rospy.get_param("~xy_resolution", 0.40)
         self.z_resolution = rospy.get_param("~z_resolution", 0.2)
         self.width = rospy.get_param("~width", 256)
@@ -30,11 +30,11 @@ class VoxelMapper:
         self.positive_obstacle_threshold = rospy.get_param("~positive_obstacle_threshold", 0.50)
         self.negative_obstacle_threshold = rospy.get_param("~negative_obstacle_threshold", 0.5)
         self.density_threshold = rospy.get_param("~density_threshold", 50)
-        self.slope_obsacle_threshold = rospy.get_param("~slope_obsacle_threshold", 0.3)
+        self.slope_obsacle_threshold = rospy.get_param("~slope_obsacle_threshold",10.0)
         self.min_roughness = rospy.get_param("~min_roughness", -10)
         self.max_roughness = rospy.get_param("~max_roughness", 0)
         self.robot_height = rospy.get_param("~robot_height", 2.0)
-        self.robot_radius = rospy.get_param("~robot_radius", 4.0)
+        self.robot_radius = rospy.get_param("~robot_radius", 10.0)
         self.ground_to_lidar_height = rospy.get_param("~ground_to_lidar_height", 1.0)
         self.freq = rospy.get_param("~freq", 10.) # Hz
         self.xy_eigen_dist = rospy.get_param("~xy_eigen_dist",1)
@@ -58,16 +58,16 @@ class VoxelMapper:
             self.z_eigen_dist
         )
 
-        self.sub_cloud = rospy.Subscriber("~cloud", PointCloud2, self.cb_lidar,queue_size=1)
-        self.sub_odom = rospy.Subscriber("~odom", Odometry, self.cb_odom,queue_size=1)
+        self.sub_cloud = rospy.Subscriber("/airsim_node/Drone1/lidar/LidarSensor1", PointCloud2, self.cb_lidar,queue_size=1)
+        self.sub_odom = rospy.Subscriber("~/airsim_node/Drone1/odom_local_ned", Odometry, self.cb_odom,queue_size=1)
         
-        self.s_obstacle_map_pub = rospy.Publisher("~soft_obstacle_map", OccupancyGrid, queue_size = 1)
-        self.p_obstacle_map_pub = rospy.Publisher("~positive_obstacle_map", OccupancyGrid, queue_size = 1)
-        self.n_obstacle_map_pub = rospy.Publisher("~negative_obstacle_map", OccupancyGrid, queue_size = 1)
-        self.h_obstacle_map_pub = rospy.Publisher("~hard_obstacle_map", OccupancyGrid, queue_size = 1)
-        self.g_certainty_pub = rospy.Publisher("~ground_certainty_map", OccupancyGrid, queue_size = 1)
-        self.a_certainty_pub = rospy.Publisher("~all_ground_certainty_map", OccupancyGrid, queue_size = 1)
-        self.r_map_pub = rospy.Publisher("~roughness_map", OccupancyGrid, queue_size = 1)
+        self.s_obstacle_map_pub = rospy.Publisher("~map/soft_obstacle", OccupancyGrid, queue_size = 1)
+        self.p_obstacle_map_pub = rospy.Publisher("~map/positive_obstacle", OccupancyGrid, queue_size = 1)
+        self.n_obstacle_map_pub = rospy.Publisher("~map/negative_obstacle", OccupancyGrid, queue_size = 1)
+        self.h_obstacle_map_pub = rospy.Publisher("~map/hard_obstacle", OccupancyGrid, queue_size = 1)
+        self.g_certainty_pub = rospy.Publisher("~map/ground_certainty", OccupancyGrid, queue_size = 1)
+        self.a_certainty_pub = rospy.Publisher("~map/all_ground_certainty", OccupancyGrid, queue_size = 1)
+        self.r_map_pub = rospy.Publisher("~map/roughness", OccupancyGrid, queue_size = 1)
 
         self.timer = rospy.Timer(rospy.Duration(1./self.freq), self.cb_timer)
         
@@ -77,7 +77,7 @@ class VoxelMapper:
         self.voxel_inf_hm_debug_pub = rospy.Publisher('~debug/inferred_height_map', PointCloud2, queue_size = 1)
 
     def cb_odom(self, data):
-        self.odom_data = (data.pose.pose.position.x,data.pose.pose.position.y,data.pose.pose.position.z)
+        self.odom_data = (data.pose.pose.position.x,-data.pose.pose.position.y,-data.pose.pose.position.z)
 
     def cb_lidar(self, data):
         # rospy.loginfo("got scan")
@@ -90,7 +90,8 @@ class VoxelMapper:
 
         scan_time = time.time()
         lidar_frame = data.header.frame_id
-        trans = self.tfBuffer.lookup_transform(self.odom_frame, lidar_frame, data.header.stamp,rospy.Duration(1))
+        #trans = self.tfBuffer.lookup_transform(self.odom_frame, lidar_frame, data.header.stamp,rospy.Duration(1))
+        trans = self.tfBuffer.lookup_transform(self.odom_frame, lidar_frame, rospy.Time(0),rospy.Duration(1))
 
         translation = np.zeros([3])
         translation[0] = trans.transform.translation.x
@@ -106,7 +107,39 @@ class VoxelMapper:
         tf_matrix = self.tf_transformer.fromTranslationRotation(translation,rotation)
         
         pc = ros_numpy.point_cloud2.pointcloud2_to_xyz_array(data)
-        self.voxel_mapper.Process_pointcloud(pc, odom_data, tf_matrix)
+        lidar_pc = self.voxel_mapper.Process_pointcloud(pc, odom_data, tf_matrix).astype('float32')
+        print('dklfljalkdjfldsjfaklj')
+        print(lidar_pc.dtype)
+        lidar_pc_pc = np.core.records.fromarrays([lidar_pc[:,0],lidar_pc[:,1],lidar_pc[:,2]],names='x,y,z')
+        self.lidar_debug_pub.publish(ros_numpy.point_cloud2.array_to_pointcloud2(lidar_pc_pc, rospy.Time.now(), self.odom_frame))
+        '''lidar_msg = PointCloud2()
+        lidar_msg.header.stamp = rospy.Time.now()
+        lidar_msg.header.frame_id = lidar_frame
+        isENU = False
+
+        if len(lidar_pc) > 3:
+            lidar_msg.height = 1
+            lidar_msg.width = int(len(lidar_pc) / 3)
+
+            lidar_msg.fields = [
+                PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
+                PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
+                PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1)
+            ]
+
+            lidar_msg.is_bigendian = False
+            lidar_msg.point_step = 12  # 4 * 3, as there are three fields, each of size 4 bytes
+            lidar_msg.row_step = lidar_msg.point_step * lidar_msg.width
+            lidar_msg.is_dense = True
+
+        # Convert the lidar_data.point_cloud to numpy array and then to PointCloud2
+            data_np = np.array(lidar_pc, dtype=np.float32)
+        #print(data_np.dtype)
+       # data_np = np.reshape(data_np, (int(data_np.shape[0]/3),3))
+       # print(data_np)
+        #lidar_msg = ros_numpy.msgify(PointCloud2, data_np)
+            lidar_msg.data = data_np.astype(np.float32).tobytes()'''
+        #self.lidar_debug_pub.publish(lidar_msg)
 
         # print("     pointcloud rate = " + str(1.0 / (time.time() - scan_time)))
 
@@ -147,6 +180,11 @@ class VoxelMapper:
         out_map.data = np.reshape(100 * (obs_map <= self.density_threshold) * (obs_map > 0),-1,order='F').astype(np.int8)
         self.s_obstacle_map_pub.publish(out_map)
         rospy.loginfo("published soft obstacle map.")
+        
+        # Positive Obstacles
+        out_map.data = np.reshape(100 * (obs_map > self.density_threshold),-1,order='F').astype(np.int8)
+        self.p_obstacle_map_pub.publish(out_map)
+        rospy.loginfo("published positive obstacle map.")
 
         # Ground certainty
         out_map.data = np.reshape(cert_map*100,-1,order='F').astype(np.int8)
@@ -189,7 +227,7 @@ class VoxelMapper:
             rospy.loginfo("published voxel inferred height map debug.")
             
 if __name__ == '__main__':
-    rospy.init_node('voxel_mapping')
+    rospy.init_node('local_planning')
 
     node = VoxelMapper()
 

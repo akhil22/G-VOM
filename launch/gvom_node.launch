@@ -2,10 +2,10 @@
 
     <node pkg="gvom" type="gvom_ros.py" name="gvom_ros" output="screen">
 
-        <remap from="~cloud" to="/warty/lidar_points" />
-        <remap from="~odom" to="/warty/odom" />
+        <remap from="~cloud" to="/airsim_node/Drone1/lidar/LidarSensor1"/>
+        <remap from="~odom" to="/airsim_node/Drone1/odom_local_ned"/>
 
-        <param name="~odom_frame" value="warty/odom" />
+        <param name="~odom_frame" value="world_enu" />
         <param name="~xy_resolution" value="0.40" />
         <param name="~z_resolution" value="0.4" />
         <param name="~width" value="256" />

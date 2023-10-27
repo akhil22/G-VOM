@@ -250,11 +250,11 @@ class Gvom:
                 combined_cell_count, self.combined_index_map, self.combined_origin, self.index_buffer[i], self.voxel_count, self.origin_buffer[i], self.xy_size, self.z_size)
             self.semaphores[i].release()
 
-        '''if not (self.last_combined_origin is None):
+        if not (self.last_combined_origin is None):
              #print("combine_old_indices")
              #__combine_old_indices
             self.__combine_old_indices[blockspergrid, self.threads_per_block_3D](
-                 combined_cell_count, self.combined_index_map, self.combined_origin, self.last_combined_index_map, self.voxel_count, self.last_combined_origin, self.xy_size, self.z_size)'''
+                 combined_cell_count, self.combined_index_map, self.combined_origin, self.last_combined_index_map, self.voxel_count, self.last_combined_origin, self.xy_size, self.z_size)
 
         self.combined_cell_count_cpu = combined_cell_count[0]
         # print(self.combined_cell_count_cpu)
