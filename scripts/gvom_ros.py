@@ -20,7 +20,7 @@ class VoxelMapper:
         self.tf_listener = tf2_ros.TransformListener(self.tfBuffer)
         self.tf_transformer = tf.TransformerROS()
 
-        self.odom_frame = rospy.get_param("~odom_frame", "world_enu")
+        self.odom_frame = rospy.get_param("~odom_frame", "Drone1")
         self.xy_resolution = rospy.get_param("~xy_resolution", 0.40)
         self.z_resolution = rospy.get_param("~z_resolution", 0.2)
         self.width = rospy.get_param("~width", 256)
@@ -77,7 +77,7 @@ class VoxelMapper:
         self.voxel_inf_hm_debug_pub = rospy.Publisher('~debug/inferred_height_map', PointCloud2, queue_size = 1)
 
     def cb_odom(self, data):
-        self.odom_data = (data.pose.pose.position.x,-data.pose.pose.position.y,-data.pose.pose.position.z)
+        self.odom_data = (data.pose.pose.position.x,data.pose.pose.position.y,data.pose.pose.position.z)
 
     def cb_lidar(self, data):
         # rospy.loginfo("got scan")
